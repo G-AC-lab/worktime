@@ -206,6 +206,16 @@
     <p class="note">同じ名前で保存すると上書きになる。保存したセットは下に並ぶ。</p>
     <div id="presetList"></div>
 
+    <h2>セットの受け渡し</h2>
+    <p class="note">複数の調査者で要素作業をそろえるための機能。書き出したファイルを配り、各自の端末で取り込む。</p>
+    <button class="wide" id="btnExportSets">全セットをCSVで書き出す</button>
+    <button class="wide" id="btnShowSets">CSVを画面に表示（コピー用）</button>
+    <label class="wide primary" for="fileSets" style="display:block;text-align:center;cursor:pointer;">CSVファイルから取り込む</label>
+    <input type="file" id="fileSets" accept=".csv,.txt,text/csv,text/plain" style="display:none;">
+    <p class="note">受け取ったCSVを選ぶ。同じ名前のセットがあれば上書きするか確認する。</p>
+    <textarea id="pasteSets" class="csv" style="height:110px;" placeholder="メールやLINEで受け取ったCSVの中身を、ここに貼り付ける"></textarea>
+    <button class="wide" id="btnImportPaste">貼り付けた内容を取り込む</button>
+
     <h2>合図と画面</h2>
     <label class="switch"><input type="checkbox" id="chkVib"><span>区切りを押したら振動させる</span></label>
     <label class="switch"><input type="checkbox" id="chkBeep"><span>区切りを押したら短い音を鳴らす</span></label>
@@ -691,6 +701,120 @@ $("btnSavePreset").onclick = function(){
   $("presetName").value = "";
   state.curPreset = nm;
   save(); renderPresets(); toast("「"+nm+"」を保存した");
+};
+
+/* ===== 作業種別セットの受け渡し ===== */
+function parseCsvText(t){
+  t = t.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if(t.indexOf("\t") >= 0 && t.indexOf(",") < 0) t = t.replace(/\t/g, ",");
+  var rows = [], row = [], cur = "", inQ = false, i, c;
+  for(i = 0; i < t.length; i++){
+    c = t.charAt(i);
+    if(inQ){
+      if(c === '"'){ if(t.charAt(i+1) === '"'){ cur += '"'; i++; } else { inQ = false; } }
+      else { cur += c; }
+    }else{
+      if(c === '"'){ inQ = true; }
+      else if(c === ","){ row.push(cur); cur = ""; }
+      else if(c === "\n"){ row.push(cur); rows.push(row); row = []; cur = ""; }
+      else { cur += c; }
+    }
+  }
+  if(cur !== "" || row.length){ row.push(cur); rows.push(row); }
+  return rows;
+}
+function buildSetsCsv(){
+  var rows = [["セット名","並び","要素作業"].join(",")];
+  state.presets.forEach(function(p){
+    p.tasks.forEach(function(t, i){
+      rows.push([q(p.name), i+1, q(t)].join(","));
+    });
+  });
+  return rows.join("\r\n") + "\r\n";
+}
+function exportSets(){
+  if(state.presets.length === 0){ toast("書き出すセットがない"); return; }
+  var blob = new Blob(["\uFEFF"+buildSetsCsv()], {type:"text/csv;charset=utf-8;"});
+  var url = URL.createObjectURL(blob);
+  var d = new Date();
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "作業種別セット_"+d.getFullYear()+two(d.getMonth()+1)+two(d.getDate())+".csv";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 3000);
+  toast("セットを書き出した");
+}
+function importSets(text){
+  var rows = parseCsvText(text);
+  if(!rows.length){ alert("中身が読み取れなかった。"); return; }
+  var start = 0, h0 = (rows[0][0]||"").trim();
+  if(h0 === "セット名" || h0.toLowerCase() === "set") start = 1;
+  var map = {}, order = [], i, r, nm, tk, ov;
+  for(i = start; i < rows.length; i++){
+    r = rows[i];
+    if(!r || r.length === 0) continue;
+    nm = (r[0]||"").trim();
+    if(!nm) continue;
+    if(r.length >= 3){ ov = parseInt((r[1]||"").trim(), 10); tk = (r[2]||"").trim(); }
+    else { ov = NaN; tk = (r[1]||"").trim(); }
+    if(!tk) continue;
+    if(!map[nm]){ map[nm] = []; order.push(nm); }
+    map[nm].push({o: isNaN(ov) ? (map[nm].length + 1) : ov, t: tk});
+  }
+  if(order.length === 0){
+    alert("セットが見つからなかった。\n\n1列目にセット名、3列目に要素作業名が並ぶ形式にする。書き出した CSV をそのまま渡すのが確実。");
+    return;
+  }
+  var dup = order.filter(function(n){
+    return state.presets.some(function(p){ return p.name === n; });
+  });
+  var msg = order.length + "件のセットを取り込む。\n\n" + order.join("、");
+  if(dup.length) msg += "\n\n同じ名前のセットが " + dup.length + "件ある（" + dup.join("、") + "）。上書きする。";
+  if(!confirm(msg)) return;
+  order.forEach(function(n){
+    var list = map[n].sort(function(a,b){ return a.o - b.o; }).map(function(x){ return x.t; });
+    var uniq = [];
+    list.forEach(function(t){ if(uniq.indexOf(t) < 0) uniq.push(t); });
+    var idx = -1, k;
+    for(k = 0; k < state.presets.length; k++){ if(state.presets[k].name === n){ idx = k; break; } }
+    if(idx >= 0) state.presets[idx].tasks = uniq;
+    else state.presets.push({name:n, tasks:uniq});
+  });
+  save(); renderPresets();
+  toast(order.length + "件を取り込んだ");
+}
+function readFileSmart(file, cb){
+  var fr = new FileReader();
+  fr.onload = function(){
+    var buf = fr.result, txt = "";
+    try{ txt = new TextDecoder("utf-8").decode(buf); }catch(e){ txt = ""; }
+    if(txt.indexOf("\uFFFD") >= 0){
+      try{ txt = new TextDecoder("shift_jis").decode(buf); }catch(e){}
+    }
+    cb(txt);
+  };
+  fr.onerror = function(){ alert("ファイルを読めなかった。"); };
+  fr.readAsArrayBuffer(file);
+}
+$("btnExportSets").onclick = exportSets;
+$("btnShowSets").onclick = function(){
+  if(state.presets.length === 0){ toast("書き出すセットがない"); return; }
+  var ta = $("pasteSets");
+  ta.value = buildSetsCsv();
+  ta.scrollIntoView({block:"center"});
+  ta.select();
+  toast("この内容をコピーして渡す");
+};
+$("fileSets").onchange = function(){
+  var f = $("fileSets").files && $("fileSets").files[0];
+  if(!f) return;
+  readFileSmart(f, function(txt){ importSets(txt); });
+  $("fileSets").value = "";
+};
+$("btnImportPaste").onclick = function(){
+  var t = $("pasteSets").value.trim();
+  if(!t){ toast("貼り付ける内容がない"); return; }
+  importSets(t);
 };
 
 /* ===== 設定：要素作業 ===== */
