@@ -122,6 +122,9 @@
   .pset .cnt{font-size:13px;color:var(--ink-soft);flex:none;}
   .pset button{border:1px solid var(--line);background:#fff;font-family:inherit;font-size:15px;padding:7px 12px;border-radius:6px;color:var(--ink);flex:none;}
   .pset button.load{background:var(--forest);border-color:var(--forest);color:#fff;font-weight:700;}
+  .pset button.rm{color:var(--stop);border-color:#E2D2CE;margin-left:2px;padding:7px 9px;font-size:13px;}
+  .pset.cur{border-color:var(--forest);border-width:2px;background:#F1F7F1;}
+  .pset .badge{font-size:12px;font-weight:700;color:#fff;background:var(--forest);padding:2px 6px;border-radius:3px;flex:none;}
   .wide{width:100%;font-family:inherit;font-size:17px;font-weight:700;padding:14px;border-radius:8px;border:2px solid var(--tap);background:var(--panel);color:var(--ink);margin-top:8px;}
   .wide.primary{background:var(--forest);border-color:var(--forest);color:#fff;}
   .note{font-size:14px;color:var(--ink-soft);margin:6px 0 0;}
@@ -185,21 +188,23 @@
     <label class="switch"><input type="radio" name="mode" value="split" id="modeSplit"><span><b>区切り方式</b><br><span class="note">区切りボタンで時刻を確定し、そのあとで要素作業を選ぶ。次に何が来るか読めない現場向け。</span></span></label>
     <label class="switch"><input type="radio" name="mode" value="task" id="modeTask"><span><b>作業ボタン方式</b><br><span class="note">要素作業のボタンを押した時刻が、そのまま切り替え時刻になる。手順が決まっている作業向け。</span></span></label>
 
-    <h2>作業種別セット</h2>
-    <div id="presetList"></div>
-    <div class="taskrow">
-      <input id="presetName" placeholder="セット名（例: 架線系集材）" autocomplete="off">
-      <button id="btnSavePreset">現在の内容を保存</button>
-    </div>
-    <p class="note">下の「要素作業の登録」の内容に名前を付けて保存する。同じ名前で保存すると上書きになる。</p>
-
     <h2>要素作業の登録</h2>
+    <p class="note" id="curPreset"></p>
     <div id="taskEditor"></div>
     <div class="taskrow">
       <input id="newTask" placeholder="要素作業名を入力" autocomplete="off">
       <button id="btnAddTask">追加</button>
     </div>
-    <p class="note">上下ボタンで並べ替え。記録に使われている要素作業は削除できない。</p>
+    <p class="note">上下ボタンで並べ替え。記録に使われている要素作業は削除できない。ここが、記録画面に並ぶボタンになる。</p>
+
+    <h2>作業種別セット</h2>
+    <p class="note">上の一覧に名前を付けて保存しておくと、観測対象に応じて呼び出せる。</p>
+    <div class="taskrow">
+      <input id="presetName" placeholder="セット名（例: 架線系集材）" autocomplete="off">
+      <button id="btnSavePreset" style="background:#2F6B3F;border-color:#2F6B3F;color:#fff;font-weight:700;">保存</button>
+    </div>
+    <p class="note">同じ名前で保存すると上書きになる。保存したセットは下に並ぶ。</p>
+    <div id="presetList"></div>
 
     <h2>合図と画面</h2>
     <label class="switch"><input type="checkbox" id="chkVib"><span>区切りを押したら振動させる</span></label>
@@ -250,7 +255,7 @@ var SEED_PRESETS = [
 var state = {
   sessionName:"", mode:"split", tasks:DEFAULT_TASKS.slice(),
   presets:[], records:[], running:null,
-  wake:true, vib:true, beep:false, vibMs:120, numKeypad:true
+  wake:true, vib:true, beep:false, vibMs:120, numKeypad:true, curPreset:""
 };
 var target = "cur";
 
@@ -271,6 +276,7 @@ function load(){
     state.vibMs = s.vibMs || 120;
     state.numKeypad = (s.numKeypad !== false);
     state.presets = Array.isArray(s.presets) ? s.presets : [];
+    state.curPreset = s.curPreset || "";
   }
   if(!state.presets || state.presets.length === 0) state.presets = SEED_PRESETS.slice();
 }
@@ -634,26 +640,40 @@ function showCsv(){
 function renderPresets(){
   var box = $("presetList");
   box.innerHTML = "";
+  $("curPreset").textContent = state.curPreset
+    ? "いま読み込んでいるセット：" + state.curPreset
+    : "どのセットも読み込んでいない（手入力の状態）";
   if(state.presets.length === 0){
-    box.innerHTML = '<p class="note">保存されたセットがない。</p>';
+    box.innerHTML = '<p class="note">保存されたセットがない。上の欄に名前を入れて「保存」を押すと、ここに並ぶ。</p>';
     return;
   }
   state.presets.forEach(function(p, i){
-    var row = document.createElement("div"); row.className = "pset";
+    var row = document.createElement("div");
+    row.className = "pset" + (state.curPreset === p.name ? " cur" : "");
     var nm = document.createElement("span"); nm.className = "nm"; nm.textContent = p.name;
+    row.appendChild(nm);
+    if(state.curPreset === p.name){
+      var bd = document.createElement("span"); bd.className = "badge"; bd.textContent = "使用中";
+      row.appendChild(bd);
+    }
     var cnt = document.createElement("span"); cnt.className = "cnt"; cnt.textContent = p.tasks.length + "項目";
+    row.appendChild(cnt);
     var ld = document.createElement("button"); ld.className = "load"; ld.textContent = "読込";
     ld.onclick = function(){
       if(!confirm("要素作業を「"+p.name+"」に入れ替える。記録済みのデータは消えない。")) return;
       state.tasks = p.tasks.slice();
+      state.curPreset = p.name;
       save(); renderSet(); renderRec(); toast("「"+p.name+"」を読み込んだ");
     };
-    var dl = document.createElement("button"); dl.textContent = "×";
+    row.appendChild(ld);
+    var dl = document.createElement("button"); dl.className = "rm"; dl.textContent = "削除";
     dl.onclick = function(){
-      if(!confirm("セット「"+p.name+"」を削除する。")) return;
-      state.presets.splice(i,1); save(); renderPresets();
+      if(!confirm("セット「"+p.name+"」そのものを一覧から消す。元に戻せない。\n\n要素作業の一覧はそのまま残る。")) return;
+      state.presets.splice(i,1);
+      if(state.curPreset === p.name) state.curPreset = "";
+      save(); renderPresets(); toast("セットを削除した");
     };
-    row.appendChild(nm); row.appendChild(cnt); row.appendChild(ld); row.appendChild(dl);
+    row.appendChild(dl);
     box.appendChild(row);
   });
 }
@@ -669,6 +689,7 @@ $("btnSavePreset").onclick = function(){
     state.presets.push({name:nm, tasks:state.tasks.slice()});
   }
   $("presetName").value = "";
+  state.curPreset = nm;
   save(); renderPresets(); toast("「"+nm+"」を保存した");
 };
 
@@ -688,7 +709,7 @@ function renderSet(){
       if(!nv){ inp.value = name; return; }
       state.records.forEach(function(r){ if(r.task === name) r.task = nv; });
       if(state.running && state.running.task === name) state.running.task = nv;
-      state.tasks[i] = nv; save(); renderSet(); renderRec();
+      state.tasks[i] = nv; state.curPreset = ""; save(); renderSet(); renderRec();
     };
     var up = document.createElement("button"); up.textContent = "↑";
     up.onclick = function(){ if(i>0){ var t=state.tasks[i-1]; state.tasks[i-1]=state.tasks[i]; state.tasks[i]=t; save(); renderSet(); renderRec(); } };
@@ -699,7 +720,7 @@ function renderSet(){
       var used = state.records.some(function(r){ return r.task === name; }) ||
                  (state.running && state.running.task === name);
       if(used){ toast("記録があるので削除できない"); return; }
-      state.tasks.splice(i,1); save(); renderSet(); renderRec();
+      state.tasks.splice(i,1); state.curPreset = ""; save(); renderSet(); renderRec();
     };
     row.appendChild(sw); row.appendChild(inp); row.appendChild(up); row.appendChild(dn); row.appendChild(del);
     box.appendChild(row);
@@ -709,7 +730,7 @@ $("btnAddTask").onclick = function(){
   var v = $("newTask").value.trim();
   if(!v) return;
   if(state.tasks.indexOf(v) >= 0){ toast("同じ名前が登録済み"); return; }
-  state.tasks.push(v); $("newTask").value = "";
+  state.tasks.push(v); $("newTask").value = ""; state.curPreset = "";
   save(); renderSet(); renderRec();
 };
 $("btnClear").onclick = function(){
