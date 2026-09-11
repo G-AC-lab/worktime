@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17251C">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="作業時間">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<title>作業時間記録</title>
+<style>
+  :root{
+    --paper:#ECEFE9; --panel:#FFFFFF; --ink:#17251C; --ink-soft:#5A675E;
+    --line:#C6CEC4; --forest:#2F6B3F; --stop:#A83320; --tap:#0F1A13; --unset:#8A6A1B;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif;
+    font-size:17px; line-height:1.5; touch-action:manipulation; overscroll-behavior:none;
+  }
+  #app{display:flex;flex-direction:column;height:100%;max-width:640px;margin:0 auto;}
+
+  header{
+    background:var(--tap);color:#F2F5F0;padding:8px 12px;
+    padding-top:calc(8px + env(safe-area-inset-top,0px));
+    display:flex;align-items:center;gap:10px;
+  }
+  header input{
+    flex:1;min-width:0;background:transparent;border:none;border-bottom:1px solid #4A5A50;
+    color:#F2F5F0;font-size:16px;font-family:inherit;padding:4px 2px;
+  }
+  header input::placeholder{color:#8B9A90;}
+  header input:focus{outline:none;border-bottom-color:#9BD1A9;}
+  .tabs{display:flex;gap:2px;}
+  .tabs button{background:#2A382E;color:#B9C7BD;border:none;font-family:inherit;font-size:14px;padding:8px 12px;border-radius:4px;}
+  .tabs button[aria-selected="true"]{background:#F2F5F0;color:var(--tap);font-weight:700;}
+
+  .head{background:var(--panel);border-bottom:2px solid var(--tap);padding:8px 14px 10px;transition:background .05s;}
+  .head.flash{background:#BFE3C8;}
+  .head .lbl{font-size:14px;color:var(--ink-soft);}
+  .head .task{font-size:25px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .head .task.unset{color:var(--unset);}
+  .clockline{display:flex;align-items:baseline;justify-content:space-between;gap:12px;}
+  .clock{font-size:46px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.05;}
+  .since{font-size:14px;color:var(--ink-soft);font-variant-numeric:tabular-nums;text-align:right;}
+  .idle .clock{color:#9AA79E;}
+
+  main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+
+  .numrow{display:flex;align-items:center;gap:6px;padding:8px 8px 0;}
+  .numrow label{font-size:15px;font-weight:700;color:var(--ink-soft);flex:none;}
+  .numrow input{
+    flex:1;min-width:0;font-family:inherit;font-size:19px;font-weight:700;
+    padding:9px 10px;border:2px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);
+  }
+  .numrow input:focus{outline:none;border-color:var(--forest);}
+  .numrow.prev label{color:var(--unset);}
+  .numrow.prev input{border-color:var(--unset);background:#FFF8E8;}
+  .numrow button{flex:none;border:2px solid var(--line);background:#fff;color:var(--ink-soft);font-family:inherit;font-size:18px;padding:8px 13px;border-radius:7px;}
+
+  .target{display:flex;gap:6px;padding:8px 8px 0;}
+  .target button{flex:1;font-family:inherit;font-size:15px;font-weight:700;padding:9px 4px;border-radius:6px;border:2px solid var(--line);background:var(--panel);color:var(--ink-soft);}
+  .target button[aria-selected="true"]{border-color:var(--tap);background:var(--tap);color:#fff;}
+  .target button:disabled{opacity:.4;}
+  .prevline{padding:8px 12px 0;font-size:17px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.35;}
+  .prevline .t{color:var(--ink-soft);font-weight:400;font-size:15px;}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:8px;}
+  .tbtn{
+    position:relative;border:none;border-radius:8px;color:#fff;font-family:inherit;
+    font-size:18px;font-weight:700;line-height:1.25;min-height:62px;padding:8px 8px 8px 12px;
+    text-align:left;word-break:break-all;box-shadow:inset 0 -3px 0 rgba(0,0,0,.22);
+  }
+  .tbtn:active{transform:translateY(2px);box-shadow:inset 0 -1px 0 rgba(0,0,0,.22);}
+  .tbtn.active{outline:4px solid var(--tap);outline-offset:-4px;}
+  .tbtn.active::after{content:"選択中";position:absolute;right:8px;bottom:5px;font-size:11px;font-weight:700;background:rgba(0,0,0,.35);padding:2px 6px;border-radius:3px;}
+  .hint{padding:2px 14px 14px;color:var(--ink-soft);font-size:14px;}
+
+  footer{background:var(--paper);border-top:1px solid var(--line);padding:6px 8px calc(8px + env(safe-area-inset-bottom,0px));}
+  .subrow{display:flex;gap:8px;margin-bottom:6px;}
+  .subrow button{flex:1;font-family:inherit;font-size:15px;font-weight:700;padding:10px 4px;border-radius:7px;border:2px solid var(--tap);background:var(--panel);color:var(--ink);}
+  .subrow button.stop{background:var(--stop);border-color:var(--stop);color:#fff;}
+  .subrow button:disabled{opacity:.35;}
+  #btnLap{
+    width:100%;font-family:inherit;font-size:30px;font-weight:800;letter-spacing:.08em;
+    padding:26px 8px;border-radius:10px;border:none;background:var(--forest);color:#fff;
+    box-shadow:inset 0 -5px 0 rgba(0,0,0,.28);
+  }
+  #btnLap:active{transform:translateY(3px);box-shadow:inset 0 -2px 0 rgba(0,0,0,.28);}
+  #btnLap.start{background:var(--tap);}
+
+  .pane{padding:12px 12px 24px;}
+  .pane h2{font-size:17px;margin:18px 0 8px;font-weight:700;border-left:5px solid var(--forest);padding-left:8px;}
+  .pane h2:first-child{margin-top:4px;}
+  table{width:100%;border-collapse:collapse;font-size:15px;font-variant-numeric:tabular-nums;}
+  th,td{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left;vertical-align:top;}
+  th{font-weight:700;color:var(--ink-soft);font-size:13px;}
+  td.num{text-align:right;}
+  .rec{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px;}
+  .rec.unset{border-color:var(--unset);border-width:2px;}
+  .rec .r1{display:flex;align-items:center;gap:8px;}
+  .rec .no{font-size:13px;color:var(--ink-soft);min-width:2.2em;}
+  .rec select{flex:1;min-width:0;font-family:inherit;font-size:16px;padding:6px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);}
+  .rec .r2{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:14px;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
+  .rec .r3{display:flex;gap:6px;margin-top:6px;}
+  .rec .r3 input{font-family:inherit;font-size:15px;padding:6px;border:1px solid var(--line);border-radius:6px;min-width:0;}
+  .rec .r3 .inNo{width:38%;}
+  .rec .r3 .inMemo{flex:1;}
+  .del{border:1px solid var(--line);background:#fff;color:var(--stop);font-family:inherit;font-size:14px;padding:6px 10px;border-radius:6px;}
+  .taskrow{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+  .taskrow .swatch{width:14px;height:34px;border-radius:3px;flex:none;}
+  .taskrow input{flex:1;min-width:0;font-family:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:6px;background:#fff;}
+  .taskrow button{border:1px solid var(--line);background:#fff;font-family:inherit;font-size:16px;padding:8px 10px;border-radius:6px;color:var(--ink);}
+  .pset{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 8px;margin-bottom:6px;}
+  .pset .nm{flex:1;min-width:0;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pset .cnt{font-size:13px;color:var(--ink-soft);flex:none;}
+  .pset button{border:1px solid var(--line);background:#fff;font-family:inherit;font-size:15px;padding:7px 12px;border-radius:6px;color:var(--ink);flex:none;}
+  .pset button.load{background:var(--forest);border-color:var(--forest);color:#fff;font-weight:700;}
+  .wide{width:100%;font-family:inherit;font-size:17px;font-weight:700;padding:14px;border-radius:8px;border:2px solid var(--tap);background:var(--panel);color:var(--ink);margin-top:8px;}
+  .wide.primary{background:var(--forest);border-color:var(--forest);color:#fff;}
+  .note{font-size:14px;color:var(--ink-soft);margin:6px 0 0;}
+  .switch{display:flex;align-items:flex-start;gap:10px;margin-top:10px;font-size:16px;}
+  .switch input{width:22px;height:22px;margin-top:3px;flex:none;}
+  textarea.csv{width:100%;height:180px;font-family:ui-monospace,monospace;font-size:12px;padding:8px;border:1px solid var(--line);border-radius:6px;margin-top:8px;}
+  .toast{position:fixed;left:50%;bottom:130px;transform:translateX(-50%);background:var(--tap);color:#fff;padding:10px 16px;border-radius:6px;font-size:15px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:9;max-width:90%;}
+  .toast.show{opacity:1;}
+  [hidden]{display:none !important;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <input id="sessionName" placeholder="観察対象（例: ハーベスタA・○○林班）" autocomplete="off">
+    <div class="tabs" role="tablist">
+      <button id="tabRec" role="tab" aria-selected="true">記録</button>
+      <button id="tabList" role="tab" aria-selected="false">一覧</button>
+      <button id="tabSet" role="tab" aria-selected="false">設定</button>
+    </div>
+  </header>
+
+  <div id="viewRec" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+    <div class="head idle" id="head">
+      <div class="lbl" id="nowLabel">計測前</div>
+      <div class="task" id="nowTask">下の「観察開始」を押す</div>
+      <div class="clockline">
+        <div class="clock" id="clock">0:00</div>
+        <div class="since" id="since"></div>
+      </div>
+    </div>
+
+    <main>
+      <div class="target" id="targetRow">
+        <button id="tgtCur" aria-selected="true">今の区間に付ける</button>
+        <button id="tgtPrev" aria-selected="false">1つ前を付け直す</button>
+      </div>
+      <div class="prevline" id="prevLine"></div>
+      <div class="numrow" id="numRow">
+        <label for="itemNo" id="noLabel">番号</label>
+        <input id="itemNo" type="text" inputmode="numeric" enterkeyhint="done" autocomplete="off" placeholder="立木・材の番号（任意）">
+        <button id="btnNoClear" title="消す">×</button>
+      </div>
+      <div class="grid" id="grid"></div>
+      <p class="hint" id="hint"></p>
+    </main>
+
+    <footer>
+      <div class="subrow">
+        <button id="btnUndo">直前を取消</button>
+        <button id="btnStop" class="stop">観察終了</button>
+      </div>
+      <button id="btnLap" class="start">観察開始</button>
+    </footer>
+  </div>
+
+  <div id="viewList" class="pane" style="flex:1;overflow-y:auto;" hidden></div>
+
+  <div id="viewSet" class="pane" style="flex:1;overflow-y:auto;" hidden>
+    <h2>入力方式</h2>
+    <label class="switch"><input type="radio" name="mode" value="split" id="modeSplit"><span><b>区切り方式</b><br><span class="note">区切りボタンで時刻を確定し、そのあとで要素作業を選ぶ。次に何が来るか読めない現場向け。</span></span></label>
+    <label class="switch"><input type="radio" name="mode" value="task" id="modeTask"><span><b>作業ボタン方式</b><br><span class="note">要素作業のボタンを押した時刻が、そのまま切り替え時刻になる。手順が決まっている作業向け。</span></span></label>
+
+    <h2>作業種別セット</h2>
+    <div id="presetList"></div>
+    <div class="taskrow">
+      <input id="presetName" placeholder="セット名（例: 架線系集材）" autocomplete="off">
+      <button id="btnSavePreset">現在の内容を保存</button>
+    </div>
+    <p class="note">下の「要素作業の登録」の内容に名前を付けて保存する。同じ名前で保存すると上書きになる。</p>
+
+    <h2>要素作業の登録</h2>
+    <div id="taskEditor"></div>
+    <div class="taskrow">
+      <input id="newTask" placeholder="要素作業名を入力" autocomplete="off">
+      <button id="btnAddTask">追加</button>
+    </div>
+    <p class="note">上下ボタンで並べ替え。記録に使われている要素作業は削除できない。</p>
+
+    <h2>合図と画面</h2>
+    <label class="switch"><input type="checkbox" id="chkVib"><span>区切りを押したら振動させる</span></label>
+    <label class="switch"><input type="checkbox" id="chkBeep"><span>区切りを押したら短い音を鳴らす</span></label>
+    <div class="taskrow" style="margin-top:8px;">
+      <label for="selVibMs" style="flex:none;font-size:15px;color:var(--ink-soft);">振動の長さ</label>
+      <select id="selVibMs" style="flex:1;font-family:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);">
+        <option value="40">短い（40ミリ秒）</option>
+        <option value="120">普通（120ミリ秒）</option>
+        <option value="250">長い（250ミリ秒）</option>
+        <option value="500">とても長い（500ミリ秒）</option>
+      </select>
+    </div>
+    <button class="wide" id="btnTestVib">振動と音をテスト</button>
+    <p class="note" id="vibNote"></p>
+    <label class="switch"><input type="checkbox" id="chkNum"><span>番号の入力を数字キーボードにする<br><span class="note">英字を含む番号を使うときは切にする</span></span></label>
+    <label class="switch"><input type="checkbox" id="chkWake"><span>観察中は画面を消灯させない</span></label>
+    <p class="note" id="wakeNote"></p>
+
+    <h2>データ</h2>
+    <button class="wide" id="btnClear">すべての記録を消去</button>
+    <p class="note">要素作業の登録と作業種別セットは残る。消去前にCSVを保存しておくこと。</p>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+var KEY = "worktime_v4", OLDKEYS = ["worktime_v3","worktime_v2"];
+var canStore = (function(){
+  try { localStorage.setItem("__t","1"); localStorage.removeItem("__t"); return true; }
+  catch(e){ return false; }
+})();
+
+var COLORS = ["#2F6B3F","#1F5C8B","#B4671B","#6A3D8C","#8A5A2B","#256F6B","#8C2F52","#4A6B18",
+              "#3A4E8C","#A0521B","#5C6B2F","#7A2F2F"];
+var UNSET_COLOR = "#8A6A1B";
+var DEFAULT_TASKS = ["走行・移動","伐倒","枝払い・造材","集積・整理","待機","その他"];
+
+var SEED_PRESETS = [
+  {name:"伐倒（チェーンソー）", tasks:["林内移動","かかり木処理・下刈り","受け口切り","追い口切り・くさび","倒木確認","燃料補給・目立て","打合せ・待機","その他"]},
+  {name:"造材（プロセッサ）",  tasks:["走行・移動","つかみ・引寄せ","枝払い・玉切り","材の集積","末木枝条整理","待機","その他"]},
+  {name:"架線系集材",          tasks:["空搬器走行","荷掛け","巻上げ","横行・搬送","荷下ろし","荷外し","索の張替え・調整","待機","その他"]},
+  {name:"車両系集材（フォワーダ）", tasks:["空車走行","積込み","積載走行","荷下ろし","土場整理","待機","その他"]}
+];
+
+var state = {
+  sessionName:"", mode:"split", tasks:DEFAULT_TASKS.slice(),
+  presets:[], records:[], running:null,
+  wake:true, vib:true, beep:false, vibMs:120, numKeypad:true
+};
+var target = "cur";
+
+function load(){
+  if(!canStore){ state.presets = SEED_PRESETS.slice(); return; }
+  var s = null;
+  try{ s = JSON.parse(localStorage.getItem(KEY) || "null"); }catch(e){}
+  if(!s){ OLDKEYS.forEach(function(k){ if(s) return; try{ s = JSON.parse(localStorage.getItem(k) || "null"); }catch(e){} }); }
+  if(s && Array.isArray(s.tasks)){
+    state.sessionName = s.sessionName || "";
+    state.mode = (s.mode === "task") ? "task" : "split";
+    state.tasks = s.tasks;
+    state.records = Array.isArray(s.records) ? s.records : [];
+    state.running = s.running || null;
+    state.wake = (s.wake !== false);
+    state.vib  = (s.vib  !== false);
+    state.beep = (s.beep === true);
+    state.vibMs = s.vibMs || 120;
+    state.numKeypad = (s.numKeypad !== false);
+    state.presets = Array.isArray(s.presets) ? s.presets : [];
+  }
+  if(!state.presets || state.presets.length === 0) state.presets = SEED_PRESETS.slice();
+}
+function save(){
+  if(!canStore) return;
+  try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){}
+}
+
+function two(n){ return (n<10?"0":"")+n; }
+function hms(ms){ var d=new Date(ms); return two(d.getHours())+":"+two(d.getMinutes())+":"+two(d.getSeconds()); }
+function ymd(ms){ var d=new Date(ms); return d.getFullYear()+"-"+two(d.getMonth()+1)+"-"+two(d.getDate()); }
+function dur(sec){
+  sec = Math.floor(sec);
+  var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
+  return h>0 ? h+":"+two(m)+":"+two(s) : m+":"+two(s);
+}
+function label(t){ return t ? t : "未分類"; }
+function colorOf(t){
+  if(!t) return UNSET_COLOR;
+  var i = state.tasks.indexOf(t);
+  if(i < 0){ var h=0,k; for(k=0;k<t.length;k++){h=(h*31+t.charCodeAt(k))|0;} i=Math.abs(h); }
+  return COLORS[i % COLORS.length];
+}
+var $ = function(id){ return document.getElementById(id); };
+var toastTimer = null;
+function toast(msg){
+  var t=$("toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer=setTimeout(function(){ t.classList.remove("show"); },1700);
+}
+
+/* ===== 合図（振動・音・画面の点滅） ===== */
+var audioCtx = null;
+function beep(){
+  try{
+    if(!audioCtx){
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return false;
+      audioCtx = new AC();
+    }
+    if(audioCtx.state === "suspended") audioCtx.resume();
+    var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = "square"; o.frequency.value = 1180;
+    g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.28, audioCtx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.13);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + 0.14);
+    return true;
+  }catch(e){ return false; }
+}
+function vibrate(ms){
+  if(!navigator.vibrate) return false;
+  try{ return navigator.vibrate(ms) !== false; }catch(e){ return false; }
+}
+function flash(){
+  var h = $("head");
+  h.classList.add("flash");
+  setTimeout(function(){ h.classList.remove("flash"); }, 160);
+}
+function signal(){
+  flash();
+  if(state.vib) vibrate(state.vibMs);
+  if(state.beep) beep();
+}
+
+/* ===== 記録操作 ===== */
+function noTarget(){
+  if(state.mode === "split" && target === "prev" && state.records.length){
+    return state.records[state.records.length-1];
+  }
+  return state.running;
+}
+function curNo(){ return $("itemNo").value.trim(); }
+function pushRunning(endMs){
+  state.records.push({
+    task: state.running.task || null,
+    start: state.running.start,
+    end: endMs,
+    no: state.running.no || "",
+    memo: ""
+  });
+}
+function lap(){
+  var now = Date.now();
+  if(state.running){
+    pushRunning(now);
+    state.running = {task:null, start:now, no:""};
+    $("itemNo").value = "";
+  }else{
+    state.running = {task:null, start:now, no:curNo()};
+  }
+  target = "cur";
+  signal();
+  save(); renderRec(); requestWake();
+}
+
+function assign(name){
+  if(state.mode === "task"){
+    var now = Date.now();
+    if(state.running){
+      pushRunning(now);
+      state.running = {task:name, start:now, no:""};
+      $("itemNo").value = "";
+    }else{
+      state.running = {task:name, start:now, no:curNo()};
+    }
+    signal();
+    save(); renderRec(); requestWake();
+    return;
+  }
+  if(target === "prev"){
+    if(state.records.length === 0){ toast("1つ前の区間がない"); return; }
+    state.records[state.records.length-1].task = name;
+    target = "cur";
+    toast("1つ前を「"+name+"」にした");
+  }else{
+    if(!state.running){ toast("先に観察開始を押す"); return; }
+    state.running.task = name;
+  }
+  save(); renderRec();
+}
+
+function stopAll(){
+  if(!state.running){ toast("計測していない"); return; }
+  if(!confirm("観察を終了する。今の区間をここで区切る。")) return;
+  pushRunning(Date.now());
+  state.running = null;
+  $("itemNo").value = "";
+  releaseWake();
+  save(); renderRec(); toast("観察を終了した");
+}
+
+function undo(){
+  if(state.running){
+    if(state.records.length > 0){
+      var last = state.records.pop();
+      state.running = {task:last.task, start:last.start, no:last.no||""};
+      toast("直前の区切りを取消した");
+    }else{
+      state.running = null;
+      toast("観察開始を取消した");
+    }
+  }else if(state.records.length > 0){
+    var r = state.records.pop();
+    state.running = {task:r.task, start:r.start, no:r.no||""};
+    toast("観察終了を取消し、計測に戻した");
+  }else{
+    toast("取消す記録がない");
+  }
+  target = "cur";
+  save(); renderRec();
+}
+
+/* ===== 記録画面 ===== */
+function renderGrid(){
+  var g = $("grid");
+  g.innerHTML = "";
+  var cur;
+  if(state.mode === "split" && target === "prev"){
+    cur = state.records.length ? state.records[state.records.length-1].task : null;
+  }else{
+    cur = state.running ? state.running.task : null;
+  }
+  state.tasks.forEach(function(name){
+    var b = document.createElement("button");
+    b.className = "tbtn" + (cur === name ? " active" : "");
+    b.style.background = colorOf(name);
+    b.textContent = name;
+    b.onclick = function(){ assign(name); };
+    g.appendChild(b);
+  });
+}
+
+function renderRec(){
+  var split = (state.mode === "split");
+  $("targetRow").hidden = !split;
+  $("btnLap").hidden = !split;
+  $("tgtCur").setAttribute("aria-selected", target === "cur");
+  $("tgtPrev").setAttribute("aria-selected", target === "prev");
+  $("tgtPrev").disabled = (state.records.length === 0);
+  $("tgtCur").disabled = !state.running;
+
+  var lapBtn = $("btnLap");
+  if(state.running){ lapBtn.textContent = "区 切 り"; lapBtn.classList.remove("start"); }
+  else { lapBtn.textContent = state.records.length ? "観察を再開" : "観察開始"; lapBtn.classList.add("start"); }
+
+  var pl = $("prevLine");
+  if(split && state.records.length){
+    var p = state.records[state.records.length-1];
+    pl.innerHTML = "1つ前：" + esc(label(p.task)) + (p.no ? "（" + esc(p.no) + "）" : "") +
+                   '<span class="t">　' + hms(p.start) + "→" + hms(p.end) + "　" + dur((p.end-p.start)/1000) + "</span>";
+    pl.hidden = false;
+  }else{ pl.hidden = true; }
+
+  var head = $("head"), nt = $("nowTask");
+  if(state.running){
+    head.classList.remove("idle");
+    $("nowLabel").textContent = "計測中の区間";
+    nt.textContent = label(state.running.task);
+    nt.className = "task" + (state.running.task ? "" : " unset");
+    $("since").textContent = "開始 " + hms(state.running.start) + " ／ 記録 " + state.records.length + "件";
+
+  }else{
+    head.classList.add("idle");
+    $("nowLabel").textContent = state.records.length ? "停止中" : "計測前";
+    nt.textContent = state.records.length ? "再開すると続きから記録する" : (split ? "下の「観察開始」を押す" : "要素作業をタップして開始");
+    nt.className = "task";
+    $("clock").textContent = "0:00";
+    $("since").textContent = state.records.length ? "記録 " + state.records.length + "件" : "";
+  }
+  $("btnStop").disabled = !state.running;
+
+  var nt2 = noTarget(), prevMode = (split && target === "prev" && state.records.length > 0);
+  $("noLabel").textContent = prevMode ? "1つ前の番号" : "番号";
+  $("numRow").className = "numrow" + (prevMode ? " prev" : "");
+  $("itemNo").disabled = !nt2;
+  $("itemNo").setAttribute("inputmode", state.numKeypad ? "numeric" : "text");
+  if(document.activeElement !== $("itemNo")) $("itemNo").value = nt2 ? (nt2.no || "") : "";
+
+  if(split){
+    $("hint").textContent = target === "prev"
+      ? "1つ前の区間に付け直す。選ぶと自動で「今の区間」に戻る。"
+      : "区切りで時刻を止めてから、作業を見て要素作業を選ぶ。番号は区切るたびに空になる。";
+  }else{
+    $("hint").textContent = "タップした瞬間が、前の要素作業の終了時刻であり、その要素作業の開始時刻になる。";
+  }
+  renderGrid();
+}
+
+setInterval(function(){
+  if(state.running && !$("viewRec").hidden){
+    $("clock").textContent = dur((Date.now() - state.running.start)/1000);
+  }
+}, 250);
+
+/* ===== 一覧 ===== */
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
+function renderList(){
+  var v = $("viewList");
+  v.innerHTML = "";
+  if(state.records.length === 0 && !state.running){
+    v.innerHTML = '<p class="note">記録はまだない。「記録」画面で観察を開始する。</p>';
+    return;
+  }
+  var sum = {}, total = 0, order = [];
+  state.records.forEach(function(r){
+    var k = label(r.task), s = (r.end - r.start)/1000;
+    if(!sum[k]){ sum[k] = {n:0, sec:0}; order.push(k); }
+    sum[k].n++; sum[k].sec += s; total += s;
+  });
+  var h2a = document.createElement("h2"); h2a.textContent = "要素作業別の集計"; v.appendChild(h2a);
+  var keys = state.tasks.filter(function(k){ return sum[k]; })
+    .concat(order.filter(function(k){ return state.tasks.indexOf(k) < 0; }));
+  var html = "<tr><th>要素作業</th><th>回数</th><th>合計</th><th>平均</th><th>割合</th></tr>";
+  keys.forEach(function(k){
+    var x = sum[k];
+    html += "<tr><td>"+esc(k)+"</td><td class='num'>"+x.n+"</td><td class='num'>"+dur(x.sec)+
+            "</td><td class='num'>"+dur(x.sec/x.n)+"</td><td class='num'>"+
+            (total ? (x.sec/total*100).toFixed(1) : "0.0")+"%</td></tr>";
+  });
+  html += "<tr><td><b>合計</b></td><td class='num'>"+state.records.length+"</td><td class='num'><b>"+dur(total)+
+          "</b></td><td></td><td class='num'>100%</td></tr>";
+  var tbl = document.createElement("table"); tbl.innerHTML = html; v.appendChild(tbl);
+
+  var h2b = document.createElement("h2"); h2b.textContent = "記録の明細"; v.appendChild(h2b);
+  var pn = document.createElement("p"); pn.className = "note";
+  pn.textContent = "未分類の区間はここで選び直す。番号と備考もあとから直せる。時刻はそのまま残る。";
+  v.appendChild(pn);
+
+  state.records.forEach(function(r, i){
+    var d = document.createElement("div"); d.className = "rec" + (r.task ? "" : " unset");
+    var r1 = document.createElement("div"); r1.className = "r1";
+    var no = document.createElement("span"); no.className = "no"; no.textContent = (i+1);
+    var sel = document.createElement("select");
+    var o0 = document.createElement("option"); o0.value = ""; o0.textContent = "未分類";
+    if(!r.task) o0.selected = true;
+    sel.appendChild(o0);
+    var opts = state.tasks.slice();
+    if(r.task && opts.indexOf(r.task) < 0) opts.push(r.task);
+    opts.forEach(function(t){
+      var o = document.createElement("option"); o.value = t; o.textContent = t;
+      if(t === r.task) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.onchange = function(){ r.task = sel.value || null; save(); renderList(); renderRec(); };
+    var del = document.createElement("button"); del.className = "del"; del.textContent = "削除";
+    del.onclick = function(){
+      if(confirm((i+1)+"行目「"+label(r.task)+"」を削除する。前後の時刻はつながらない。")){
+        state.records.splice(i,1); save(); renderList(); renderRec();
+      }
+    };
+    r1.appendChild(no); r1.appendChild(sel); r1.appendChild(del);
+    var r2 = document.createElement("div"); r2.className = "r2";
+    r2.innerHTML = "<span>"+hms(r.start)+" → "+hms(r.end)+"</span><span>"+dur((r.end-r.start)/1000)+"</span>";
+    var r3 = document.createElement("div"); r3.className = "r3";
+    var inNo = document.createElement("input"); inNo.className = "inNo"; inNo.placeholder = "番号";
+    inNo.value = r.no || "";
+    inNo.oninput = function(){ r.no = inNo.value; save(); };
+    var inMemo = document.createElement("input"); inMemo.className = "inMemo"; inMemo.placeholder = "備考（任意）";
+    inMemo.value = r.memo || "";
+    inMemo.oninput = function(){ r.memo = inMemo.value; save(); };
+    r3.appendChild(inNo); r3.appendChild(inMemo);
+    d.appendChild(r1); d.appendChild(r2); d.appendChild(r3);
+    v.appendChild(d);
+  });
+
+  if(state.running){
+    var p = document.createElement("p"); p.className = "note";
+    p.textContent = "「"+label(state.running.task)+"」を計測中（"+hms(state.running.start)+" 開始）。CSVには区切ってから含まれる。";
+    v.appendChild(p);
+  }
+  var b1 = document.createElement("button"); b1.className = "wide primary"; b1.textContent = "CSVを保存";
+  b1.onclick = downloadCsv; v.appendChild(b1);
+  var b2 = document.createElement("button"); b2.className = "wide"; b2.textContent = "CSVを画面に表示（コピー用）";
+  b2.onclick = showCsv; v.appendChild(b2);
+}
+
+/* ===== CSV ===== */
+function q(v){
+  v = (v === undefined || v === null) ? "" : String(v);
+  return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v;
+}
+function buildCsv(){
+  var rows = [["日付","観察対象","連番","要素作業","開始時刻","終了時刻","所要秒","累積秒","番号","備考"].join(",")];
+  var acc = 0;
+  state.records.forEach(function(r,i){
+    var sec = Math.round((r.end - r.start)/1000);
+    acc += sec;
+    rows.push([ymd(r.start), q(state.sessionName), i+1, q(label(r.task)), hms(r.start), hms(r.end),
+               sec, acc, q(r.no||""), q(r.memo||"")].join(","));
+  });
+  return rows.join("\r\n") + "\r\n";
+}
+function csvName(){
+  var base = (state.sessionName || "作業時間").replace(/[\\\/:*?"<>|]/g, "_");
+  var d = new Date();
+  return base+"_"+d.getFullYear()+two(d.getMonth()+1)+two(d.getDate())+"_"+two(d.getHours())+two(d.getMinutes())+".csv";
+}
+function downloadCsv(){
+  if(state.records.length === 0){ toast("記録がない"); return; }
+  var blob = new Blob(["\uFEFF"+buildCsv()], {type:"text/csv;charset=utf-8;"});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = csvName();
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 3000);
+  toast("CSVを保存した：" + csvName());
+}
+function showCsv(){
+  if(state.records.length === 0){ toast("記録がない"); return; }
+  var old = $("csvBox");
+  if(old){ old.remove(); return; }
+  var ta = document.createElement("textarea");
+  ta.id = "csvBox"; ta.className = "csv"; ta.readOnly = true; ta.value = buildCsv();
+  $("viewList").appendChild(ta);
+  ta.scrollIntoView({block:"center"});
+  ta.select();
+}
+
+/* ===== 設定：作業種別セット ===== */
+function renderPresets(){
+  var box = $("presetList");
+  box.innerHTML = "";
+  if(state.presets.length === 0){
+    box.innerHTML = '<p class="note">保存されたセットがない。</p>';
+    return;
+  }
+  state.presets.forEach(function(p, i){
+    var row = document.createElement("div"); row.className = "pset";
+    var nm = document.createElement("span"); nm.className = "nm"; nm.textContent = p.name;
+    var cnt = document.createElement("span"); cnt.className = "cnt"; cnt.textContent = p.tasks.length + "項目";
+    var ld = document.createElement("button"); ld.className = "load"; ld.textContent = "読込";
+    ld.onclick = function(){
+      if(!confirm("要素作業を「"+p.name+"」に入れ替える。記録済みのデータは消えない。")) return;
+      state.tasks = p.tasks.slice();
+      save(); renderSet(); renderRec(); toast("「"+p.name+"」を読み込んだ");
+    };
+    var dl = document.createElement("button"); dl.textContent = "×";
+    dl.onclick = function(){
+      if(!confirm("セット「"+p.name+"」を削除する。")) return;
+      state.presets.splice(i,1); save(); renderPresets();
+    };
+    row.appendChild(nm); row.appendChild(cnt); row.appendChild(ld); row.appendChild(dl);
+    box.appendChild(row);
+  });
+}
+$("btnSavePreset").onclick = function(){
+  var nm = $("presetName").value.trim();
+  if(!nm){ toast("セット名を入れる"); return; }
+  var idx = -1, i;
+  for(i=0;i<state.presets.length;i++){ if(state.presets[i].name === nm){ idx = i; break; } }
+  if(idx >= 0){
+    if(!confirm("同じ名前のセットがある。上書きする。")) return;
+    state.presets[idx].tasks = state.tasks.slice();
+  }else{
+    state.presets.push({name:nm, tasks:state.tasks.slice()});
+  }
+  $("presetName").value = "";
+  save(); renderPresets(); toast("「"+nm+"」を保存した");
+};
+
+/* ===== 設定：要素作業 ===== */
+function renderSet(){
+  $("modeSplit").checked = (state.mode === "split");
+  $("modeTask").checked  = (state.mode === "task");
+  renderPresets();
+  var box = $("taskEditor");
+  box.innerHTML = "";
+  state.tasks.forEach(function(name, i){
+    var row = document.createElement("div"); row.className = "taskrow";
+    var sw = document.createElement("span"); sw.className = "swatch"; sw.style.background = COLORS[i % COLORS.length];
+    var inp = document.createElement("input"); inp.value = name;
+    inp.onchange = function(){
+      var nv = inp.value.trim();
+      if(!nv){ inp.value = name; return; }
+      state.records.forEach(function(r){ if(r.task === name) r.task = nv; });
+      if(state.running && state.running.task === name) state.running.task = nv;
+      state.tasks[i] = nv; save(); renderSet(); renderRec();
+    };
+    var up = document.createElement("button"); up.textContent = "↑";
+    up.onclick = function(){ if(i>0){ var t=state.tasks[i-1]; state.tasks[i-1]=state.tasks[i]; state.tasks[i]=t; save(); renderSet(); renderRec(); } };
+    var dn = document.createElement("button"); dn.textContent = "↓";
+    dn.onclick = function(){ if(i<state.tasks.length-1){ var t=state.tasks[i+1]; state.tasks[i+1]=state.tasks[i]; state.tasks[i]=t; save(); renderSet(); renderRec(); } };
+    var del = document.createElement("button"); del.textContent = "×";
+    del.onclick = function(){
+      var used = state.records.some(function(r){ return r.task === name; }) ||
+                 (state.running && state.running.task === name);
+      if(used){ toast("記録があるので削除できない"); return; }
+      state.tasks.splice(i,1); save(); renderSet(); renderRec();
+    };
+    row.appendChild(sw); row.appendChild(inp); row.appendChild(up); row.appendChild(dn); row.appendChild(del);
+    box.appendChild(row);
+  });
+}
+$("btnAddTask").onclick = function(){
+  var v = $("newTask").value.trim();
+  if(!v) return;
+  if(state.tasks.indexOf(v) >= 0){ toast("同じ名前が登録済み"); return; }
+  state.tasks.push(v); $("newTask").value = "";
+  save(); renderSet(); renderRec();
+};
+$("btnClear").onclick = function(){
+  if(!confirm("すべての記録を消去する。元に戻せない。")) return;
+  state.records = []; state.running = null; target = "cur";
+  $("itemNo").value = "";
+  save(); renderRec(); toast("記録を消去した");
+};
+$("modeSplit").onchange = function(){ state.mode = "split"; target = "cur"; save(); renderRec(); };
+$("modeTask").onchange  = function(){ state.mode = "task";  target = "cur"; save(); renderRec(); };
+
+/* ===== 合図のテスト ===== */
+$("btnTestVib").onclick = function(){
+  var msgs = [];
+  if(!navigator.vibrate){
+    msgs.push("振動：このブラウザは対応していない");
+  }else{
+    var ok = vibrate(600) || vibrate([600]);
+    msgs.push(ok ? "振動：命令は受け付けられた。感じなければ端末側の設定を確認" : "振動：ブラウザに拒否された");
+  }
+  msgs.push(beep() ? "音：鳴らした" : "音：鳴らせなかった");
+  $("vibNote").textContent = msgs.join(" ／ ");
+};
+
+/* ===== 画面消灯の抑止 ===== */
+var wakeLock = null;
+function requestWake(){
+  if(!state.wake || !("wakeLock" in navigator) || wakeLock) return;
+  navigator.wakeLock.request("screen").then(function(w){
+    wakeLock = w;
+    w.addEventListener("release", function(){ wakeLock = null; });
+  }).catch(function(){});
+}
+function releaseWake(){ if(wakeLock){ try{ wakeLock.release(); }catch(e){} wakeLock = null; } }
+document.addEventListener("visibilitychange", function(){
+  if(document.visibilityState === "visible" && state.running) requestWake();
+});
+$("chkWake").onchange = function(){
+  state.wake = $("chkWake").checked;
+  if(state.wake && state.running) requestWake(); else releaseWake();
+  save();
+};
+$("chkVib").onchange  = function(){ state.vib  = $("chkVib").checked;  save(); };
+$("chkBeep").onchange = function(){ state.beep = $("chkBeep").checked; if(state.beep) beep(); save(); };
+$("selVibMs").onchange = function(){ state.vibMs = parseInt($("selVibMs").value,10) || 120; vibrate(state.vibMs); save(); };
+$("chkNum").onchange = function(){ state.numKeypad = $("chkNum").checked; save(); renderRec(); };
+
+/* ===== タブ・操作 ===== */
+function show(which){
+  $("viewRec").hidden = which !== "rec";
+  $("viewRec").style.display = which === "rec" ? "flex" : "none";
+  $("viewList").hidden = which !== "list";
+  $("viewSet").hidden  = which !== "set";
+  $("tabRec").setAttribute("aria-selected", which === "rec");
+  $("tabList").setAttribute("aria-selected", which === "list");
+  $("tabSet").setAttribute("aria-selected", which === "set");
+  if(which === "rec")  renderRec();
+  if(which === "list") renderList();
+  if(which === "set")  renderSet();
+}
+$("tabRec").onclick  = function(){ show("rec"); };
+$("tabList").onclick = function(){ show("list"); };
+$("tabSet").onclick  = function(){ show("set"); };
+$("btnLap").onclick  = lap;
+$("btnUndo").onclick = undo;
+$("btnStop").onclick = stopAll;
+$("tgtCur").onclick  = function(){ target = "cur";  renderRec(); };
+$("tgtPrev").onclick = function(){ target = "prev"; renderRec(); };
+$("sessionName").oninput = function(){ state.sessionName = $("sessionName").value; save(); };
+$("itemNo").oninput = function(){ var t = noTarget(); if(t){ t.no = $("itemNo").value; save(); } };
+$("itemNo").onkeydown = function(e){ if(e.key === "Enter"){ e.preventDefault(); $("itemNo").blur(); } };
+$("btnNoClear").onclick = function(){
+  $("itemNo").value = "";
+  var t = noTarget(); if(t){ t.no = ""; save(); }
+  $("itemNo").focus();
+};
+window.addEventListener("beforeunload", function(e){
+  if(state.running){ e.preventDefault(); e.returnValue = ""; }
+});
+
+/* ===== 起動 ===== */
+load();
+$("sessionName").value = state.sessionName;
+$("chkWake").checked = state.wake;
+$("chkVib").checked = state.vib;
+$("chkBeep").checked = state.beep;
+$("chkNum").checked = state.numKeypad;
+$("selVibMs").value = String(state.vibMs);
+
+$("wakeNote").textContent = ("wakeLock" in navigator)
+  ? "画面消灯の抑止はChromeなど対応ブラウザでのみ働く。"
+  : "このブラウザは画面消灯の抑止に対応していない。端末側の消灯時間を長めに設定すること。";
+if(!canStore){ $("wakeNote").textContent += " ／ この環境ではデータを端末に保存できない。閉じると記録は消える。"; }
+$("vibNote").textContent = navigator.vibrate
+  ? "マナーモードが「ミュート（サイレント）」だと振動しない。「バイブレーション」にするか解除する。音はマナーモードでも鳴る。"
+  : "このブラウザは振動に対応していない。音か画面の点滅で代用する。";
+renderRec();
+if(state.running) requestWake();
+show("rec");
+
+/* 圏外でも動かすための登録。file:// で開いたときは何もしない。 */
+if("serviceWorker" in navigator && location.protocol.indexOf("http") === 0){
+  window.addEventListener("load", function(){
+    navigator.serviceWorker.register("./sw.js").catch(function(){});
+  });
+}
+</script>
+</body>
+</html>
