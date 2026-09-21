@@ -3,6 +3,7 @@
    本体（index.html）を差し替えたときは、次にオンラインで開いた時点で自動的に新しくなる。 */
 var CACHE = "worktime-1";
 var FILES = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
+/* sets.csv は毎回取りに行くのでここには入れない */
 
 self.addEventListener("install", function(e){
   e.waitUntil(caches.open(CACHE).then(function(c){ return c.addAll(FILES); }).then(function(){ return self.skipWaiting(); }));

@@ -207,7 +207,9 @@
     <div id="presetList"></div>
 
     <h2>セットの受け渡し</h2>
-    <p class="note">複数の調査者で要素作業をそろえるための機能。書き出したファイルを配り、各自の端末で取り込む。</p>
+    <p class="note">複数の調査者で要素作業をそろえるための機能。</p>
+    <button class="wide primary" id="btnFetchSets">配布元から基準セットを取り込む</button>
+    <p class="note" id="fetchNote">アプリと同じ場所に置かれた sets.csv を読み込む。通信できる場所で押す。</p>
     <button class="wide" id="btnExportSets">全セットをCSVで書き出す</button>
     <button class="wide" id="btnShowSets">CSVを画面に表示（コピー用）</button>
     <label class="wide primary" for="fileSets" style="display:block;text-align:center;cursor:pointer;">CSVファイルから取り込む</label>
@@ -783,19 +785,44 @@ function importSets(text){
   save(); renderPresets();
   toast(order.length + "件を取り込んだ");
 }
+function decodeBuf(buf){
+  var txt = "";
+  try{ txt = new TextDecoder("utf-8").decode(buf); }catch(e){ txt = ""; }
+  if(txt.indexOf("\uFFFD") >= 0){
+    try{ txt = new TextDecoder("shift_jis").decode(buf); }catch(e){}
+  }
+  return txt;
+}
 function readFileSmart(file, cb){
   var fr = new FileReader();
-  fr.onload = function(){
-    var buf = fr.result, txt = "";
-    try{ txt = new TextDecoder("utf-8").decode(buf); }catch(e){ txt = ""; }
-    if(txt.indexOf("\uFFFD") >= 0){
-      try{ txt = new TextDecoder("shift_jis").decode(buf); }catch(e){}
-    }
-    cb(txt);
-  };
+  fr.onload = function(){ cb(decodeBuf(fr.result)); };
   fr.onerror = function(){ alert("ファイルを読めなかった。"); };
   fr.readAsArrayBuffer(file);
 }
+function fetchSets(){
+  if(location.protocol.indexOf("http") !== 0){
+    alert("この機能は、ネット上に置いた版でだけ使える。\n\n端末内のファイルを直接開いている場合は、CSVファイルから取り込むか、貼り付けて取り込む。");
+    return;
+  }
+  $("fetchNote").textContent = "読み込んでいる…";
+  fetch("./sets.csv", {cache:"no-store"}).then(function(res){
+    if(res.status === 404) throw new Error("notfound");
+    if(!res.ok) throw new Error("http");
+    return res.arrayBuffer();
+  }).then(function(buf){
+    $("fetchNote").textContent = "配布元から読み込んだ。";
+    importSets(decodeBuf(buf));
+  }).catch(function(err){
+    if(err && err.message === "notfound"){
+      $("fetchNote").textContent = "配布元に sets.csv が置かれていない。管理者に確認する。";
+      alert("配布元に sets.csv が見つからない。\n\nまだ置かれていないか、ファイル名が違う。");
+    }else{
+      $("fetchNote").textContent = "読み込めなかった。通信できる場所で試す。";
+      alert("配布元に接続できなかった。\n\n圏外か、通信が不安定な可能性がある。");
+    }
+  });
+}
+$("btnFetchSets").onclick = fetchSets;
 $("btnExportSets").onclick = exportSets;
 $("btnShowSets").onclick = function(){
   if(state.presets.length === 0){ toast("書き出すセットがない"); return; }
