@@ -7,11 +7,11 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="作業時間">
+<meta name="apple-mobile-web-app-title" content="KIZAMI">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon-192.png">
 <link rel="apple-touch-icon" href="./icon-192.png">
-<title>作業時間記録</title>
+<title>KIZAMI 作業時間記録</title>
 <style>
   :root{
     --paper:#ECEFE9; --panel:#FFFFFF; --ink:#17251C; --ink-soft:#5A675E;
@@ -239,6 +239,12 @@
     <h2>データ</h2>
     <button class="wide" id="btnClear">すべての記録を消去</button>
     <p class="note">要素作業の登録と作業種別セットは残る。消去前にCSVを保存しておくこと。</p>
+
+    <p class="note" style="margin-top:22px;padding-top:12px;border-top:1px solid var(--line);text-align:center;line-height:1.7;">
+      <b style="font-size:19px;letter-spacing:.14em;color:var(--forest);">KIZAMI</b><br>
+      森林作業の要素作業時間記録<br>
+      <span id="verLine"></span>
+    </p>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -978,6 +984,8 @@ if(!canStore){ $("wakeNote").textContent += " ／ この環境ではデータを
 $("vibNote").textContent = navigator.vibrate
   ? "マナーモードが「ミュート（サイレント）」だと振動しない。「バイブレーション」にするか解除する。音はマナーモードでも鳴る。"
   : "このブラウザは振動に対応していない。音か画面の点滅で代用する。";
+var APP_VER = "2026-09-24";
+$("verLine").textContent = "版 " + APP_VER + (location.protocol.indexOf("http") === 0 ? "" : "（端末内のファイルで実行中）");
 renderRec();
 if(state.running) requestWake();
 show("rec");

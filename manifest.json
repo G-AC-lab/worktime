@@ -1,6 +1,6 @@
 {
-  "name": "作業時間記録",
-  "short_name": "作業時間",
+  "name": "KIZAMI 作業時間記録",
+  "short_name": "KIZAMI",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
