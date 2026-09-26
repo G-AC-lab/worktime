@@ -816,8 +816,12 @@ function fetchSets(){
     if(!res.ok) throw new Error("http");
     return res.arrayBuffer();
   }).then(function(buf){
+    var txt = decodeBuf(buf);
+    if(/^\s*</.test(txt) || txt.indexOf("<html") >= 0 || txt.indexOf("<!DOCTYPE") >= 0){
+      throw new Error("offline");
+    }
     $("fetchNote").textContent = "配布元から読み込んだ。";
-    importSets(decodeBuf(buf));
+    importSets(txt);
   }).catch(function(err){
     if(err && err.message === "notfound"){
       $("fetchNote").textContent = "配布元に sets.csv が置かれていない。管理者に確認する。";
@@ -984,7 +988,7 @@ if(!canStore){ $("wakeNote").textContent += " ／ この環境ではデータを
 $("vibNote").textContent = navigator.vibrate
   ? "マナーモードが「ミュート（サイレント）」だと振動しない。「バイブレーション」にするか解除する。音はマナーモードでも鳴る。"
   : "このブラウザは振動に対応していない。音か画面の点滅で代用する。";
-var APP_VER = "2026-09-24";
+var APP_VER = "2026-09-26";
 $("verLine").textContent = "版 " + APP_VER + (location.protocol.indexOf("http") === 0 ? "" : "（端末内のファイルで実行中）");
 renderRec();
 if(state.running) requestWake();
