@@ -1,12 +1,17 @@
-/* 作業時間記録：圏外でも動かすための仕組み
+/* KIZAMI：圏外でも動かすための仕組み（区切り版・ワンタッチ版の共用）
    通信できるときは最新を取りに行き、取れなければ端末内の控えを使う。
-   本体（index.html）を差し替えたときは、次にオンラインで開いた時点で自動的に新しくなる。 */
-var CACHE = "worktime-1";
-var FILES = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
+   本体を差し替えたときは、次にオンラインで開いた時点で自動的に新しくなる。 */
+var CACHE = "worktime-2";
+var FILES = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png",
+             "./tap.html", "./manifest-tap.json", "./icon-tap-192.png", "./icon-tap-512.png"];
 /* sets.csv は毎回取りに行くのでここには入れない */
 
 self.addEventListener("install", function(e){
-  e.waitUntil(caches.open(CACHE).then(function(c){ return c.addAll(FILES); }).then(function(){ return self.skipWaiting(); }));
+  e.waitUntil(
+    caches.open(CACHE).then(function(c){
+      return Promise.all(FILES.map(function(f){ return c.add(f).catch(function(){}); }));
+    }).then(function(){ return self.skipWaiting(); })
+  );
 });
 
 self.addEventListener("activate", function(e){
@@ -26,7 +31,9 @@ self.addEventListener("fetch", function(e){
       return res;
     }).catch(function(){
       return caches.match(e.request).then(function(hit){
-        return hit || caches.match("./index.html");
+        if(hit) return hit;
+        var u = new URL(e.request.url);
+        return caches.match(u.pathname.indexOf("tap.html") >= 0 ? "./tap.html" : "./index.html");
       });
     })
   );
