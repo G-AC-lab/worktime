@@ -62,6 +62,9 @@
   .numrow input:focus{outline:none;border-color:var(--forest);}
   .numrow.prev label{color:var(--unset);}
   .numrow.prev input{border-color:var(--unset);background:#FFF8E8;}
+  #memoRow{padding:0 8px 8px;}
+  #memoRow input{font-weight:400;font-size:17px;}
+  .warn{color:#8A5A0B;font-weight:700;}
   .numrow button{flex:none;border:2px solid var(--line);background:#fff;color:var(--ink-soft);font-family:inherit;font-size:18px;padding:8px 13px;border-radius:7px;}
 
   .target{display:flex;gap:6px;padding:8px 8px 0;}
@@ -169,6 +172,11 @@
         <button id="btnNoClear" title="消す">×</button>
       </div>
       <div class="grid" id="grid"></div>
+      <div class="numrow" id="memoRow">
+        <label for="itemMemo" id="memoLabel">備考</label>
+        <input id="itemMemo" type="text" inputmode="text" enterkeyhint="done" autocomplete="off" placeholder="コメント（任意）">
+        <button id="btnMemoClear" title="消す">×</button>
+      </div>
       <p class="hint" id="hint"></p>
     </main>
 
@@ -197,13 +205,16 @@
     </div>
     <p class="note">上下ボタンで並べ替え。記録に使われている要素作業は削除できない。ここが、記録画面に並ぶボタンになる。</p>
 
-    <h2>作業種別セット</h2>
-    <p class="note">上の一覧に名前を付けて保存しておくと、観測対象に応じて呼び出せる。</p>
-    <div class="taskrow">
+    <p class="note" style="margin-top:16px;color:var(--ink);">上の要素作業一覧を編集した場合は、名前を付けて作業種別セットとして保存する。保存すれば、次からそのセットとして呼び出せる。<b>保存しないままほかのセットを読み込むと、編集した内容は消える。</b></p>
+    <p class="note warn" id="saveWarn" hidden></p>
+    <div class="taskrow" style="margin-top:6px;">
       <input id="presetName" placeholder="セット名（例: 架線系集材）" autocomplete="off">
       <button id="btnSavePreset" style="background:#2F6B3F;border-color:#2F6B3F;color:#fff;font-weight:700;">保存</button>
     </div>
-    <p class="note">同じ名前で保存すると上書きになる。保存したセットは下に並ぶ。</p>
+    <p class="note">同じ名前で保存すると上書きになる。保存したセットは下の「作業種別セット」に並ぶ。</p>
+
+    <h2>作業種別セット</h2>
+    <p class="note">観測対象に合ったセットの「読込」を押す。</p>
     <div id="presetList"></div>
 
     <h2>セットの受け渡し</h2>
@@ -273,7 +284,7 @@ var SEED_PRESETS = [
 var state = {
   sessionName:"", mode:"split", tasks:DEFAULT_TASKS.slice(),
   presets:[], records:[], running:null,
-  wake:true, vib:true, beep:false, vibMs:120, numKeypad:true, curPreset:""
+  wake:true, vib:true, beep:false, vibMs:120, numKeypad:true, curPreset:"", basePreset:""
 };
 var target = "cur";
 
@@ -295,6 +306,7 @@ function load(){
     state.numKeypad = (s.numKeypad !== false);
     state.presets = Array.isArray(s.presets) ? s.presets : [];
     state.curPreset = s.curPreset || "";
+    state.basePreset = s.basePreset || "";
   }
   if(!state.presets || state.presets.length === 0) state.presets = SEED_PRESETS.slice();
 }
@@ -368,23 +380,24 @@ function noTarget(){
   return state.running;
 }
 function curNo(){ return $("itemNo").value.trim(); }
+function curMemo(){ return $("itemMemo").value.trim(); }
 function pushRunning(endMs){
   state.records.push({
     task: state.running.task || null,
     start: state.running.start,
     end: endMs,
     no: state.running.no || "",
-    memo: ""
+    memo: state.running.memo || ""
   });
 }
 function lap(){
   var now = Date.now();
   if(state.running){
     pushRunning(now);
-    state.running = {task:null, start:now, no:""};
-    $("itemNo").value = "";
+    state.running = {task:null, start:now, no:"", memo:""};
+    $("itemNo").value = ""; $("itemMemo").value = "";
   }else{
-    state.running = {task:null, start:now, no:curNo()};
+    state.running = {task:null, start:now, no:curNo(), memo:curMemo()};
   }
   target = "cur";
   signal();
@@ -396,10 +409,10 @@ function assign(name){
     var now = Date.now();
     if(state.running){
       pushRunning(now);
-      state.running = {task:name, start:now, no:""};
-      $("itemNo").value = "";
+      state.running = {task:name, start:now, no:"", memo:""};
+      $("itemNo").value = ""; $("itemMemo").value = "";
     }else{
-      state.running = {task:name, start:now, no:curNo()};
+      state.running = {task:name, start:now, no:curNo(), memo:curMemo()};
     }
     signal();
     save(); renderRec(); requestWake();
@@ -422,7 +435,7 @@ function stopAll(){
   if(!confirm("観察を終了する。今の区間をここで区切る。")) return;
   pushRunning(Date.now());
   state.running = null;
-  $("itemNo").value = "";
+  $("itemNo").value = ""; $("itemMemo").value = "";
   releaseWake();
   save(); renderRec(); toast("観察を終了した");
 }
@@ -431,7 +444,7 @@ function undo(){
   if(state.running){
     if(state.records.length > 0){
       var last = state.records.pop();
-      state.running = {task:last.task, start:last.start, no:last.no||""};
+      state.running = {task:last.task, start:last.start, no:last.no||"", memo:last.memo||""};
       toast("直前の区切りを取消した");
     }else{
       state.running = null;
@@ -439,7 +452,7 @@ function undo(){
     }
   }else if(state.records.length > 0){
     var r = state.records.pop();
-    state.running = {task:r.task, start:r.start, no:r.no||""};
+    state.running = {task:r.task, start:r.start, no:r.no||"", memo:r.memo||""};
     toast("観察終了を取消し、計測に戻した");
   }else{
     toast("取消す記録がない");
@@ -484,7 +497,7 @@ function renderRec(){
   var pl = $("prevLine");
   if(split && state.records.length){
     var p = state.records[state.records.length-1];
-    pl.innerHTML = "1つ前：" + esc(label(p.task)) + (p.no ? "（" + esc(p.no) + "）" : "") +
+    pl.innerHTML = "1つ前：" + esc(label(p.task)) + (p.no ? "（" + esc(p.no) + "）" : "") + (p.memo ? "［備考あり］" : "") +
                    '<span class="t">　' + hms(p.start) + "→" + hms(p.end) + "　" + dur((p.end-p.start)/1000) + "</span>";
     pl.hidden = false;
   }else{ pl.hidden = true; }
@@ -513,11 +526,15 @@ function renderRec(){
   $("itemNo").disabled = !nt2;
   $("itemNo").setAttribute("inputmode", state.numKeypad ? "numeric" : "text");
   if(document.activeElement !== $("itemNo")) $("itemNo").value = nt2 ? (nt2.no || "") : "";
+  $("memoLabel").textContent = prevMode ? "1つ前の備考" : "備考";
+  $("memoRow").className = "numrow" + (prevMode ? " prev" : "");
+  $("itemMemo").disabled = !nt2;
+  if(document.activeElement !== $("itemMemo")) $("itemMemo").value = nt2 ? (nt2.memo || "") : "";
 
   if(split){
     $("hint").textContent = target === "prev"
       ? "1つ前の区間に付け直す。選ぶと自動で「今の区間」に戻る。"
-      : "区切りで時刻を止めてから、作業を見て要素作業を選ぶ。番号は区切るたびに空になる。";
+      : "区切りで時刻を止めてから、作業を見て要素作業を選ぶ。番号と備考は区切るたびに空になる。";
   }else{
     $("hint").textContent = "タップした瞬間が、前の要素作業の終了時刻であり、その要素作業の開始時刻になる。";
   }
@@ -561,10 +578,17 @@ function renderList(){
 
   var h2b = document.createElement("h2"); h2b.textContent = "記録の明細"; v.appendChild(h2b);
   var pn = document.createElement("p"); pn.className = "note";
-  pn.textContent = "未分類の区間はここで選び直す。番号と備考もあとから直せる。時刻はそのまま残る。";
+  pn.textContent = "新しい記録から順に並ぶ。未分類の区間はここで選び直す。番号と備考もあとから直せる。時刻はそのまま残る。";
   v.appendChild(pn);
 
-  state.records.forEach(function(r, i){
+  if(state.running){
+    var pr = document.createElement("p"); pr.className = "note";
+    pr.textContent = "「"+label(state.running.task)+"」を計測中（"+hms(state.running.start)+" 開始）。区切ると、この下に加わる。";
+    v.appendChild(pr);
+  }
+
+  state.records.map(function(r, i){ return [r, i]; }).reverse().forEach(function(pair){
+    var r = pair[0], i = pair[1];
     var d = document.createElement("div"); d.className = "rec" + (r.task ? "" : " unset");
     var r1 = document.createElement("div"); r1.className = "r1";
     var no = document.createElement("span"); no.className = "no"; no.textContent = (i+1);
@@ -601,11 +625,6 @@ function renderList(){
     v.appendChild(d);
   });
 
-  if(state.running){
-    var p = document.createElement("p"); p.className = "note";
-    p.textContent = "「"+label(state.running.task)+"」を計測中（"+hms(state.running.start)+" 開始）。CSVには区切ってから含まれる。";
-    v.appendChild(p);
-  }
   var b1 = document.createElement("button"); b1.className = "wide primary"; b1.textContent = "CSVを保存";
   b1.onclick = downloadCsv; v.appendChild(b1);
   var b2 = document.createElement("button"); b2.className = "wide"; b2.textContent = "CSVを画面に表示（コピー用）";
@@ -655,12 +674,42 @@ function showCsv(){
 }
 
 /* ===== 設定：作業種別セット ===== */
+function sameList(a, b){
+  if(!a || !b || a.length !== b.length) return false;
+  for(var i = 0; i < a.length; i++){ if(a[i] !== b[i]) return false; }
+  return true;
+}
+function findPreset(nm){
+  for(var i = 0; i < state.presets.length; i++){ if(state.presets[i].name === nm) return state.presets[i]; }
+  return null;
+}
+function markEdited(){
+  if(state.curPreset) state.basePreset = state.curPreset;
+  state.curPreset = "";
+}
+function unsaved(){
+  return !state.presets.some(function(p){ return sameList(p.tasks, state.tasks); });
+}
 function renderPresets(){
   var box = $("presetList");
   box.innerHTML = "";
-  $("curPreset").textContent = state.curPreset
-    ? "いま読み込んでいるセット：" + state.curPreset
-    : "どのセットも読み込んでいない（手入力の状態）";
+  if(state.curPreset){
+    var cp = findPreset(state.curPreset);
+    if(!cp || !sameList(cp.tasks, state.tasks)) markEdited();
+  }
+  var cur = $("curPreset"), warn = $("saveWarn");
+  cur.className = "note"; warn.hidden = true;
+  if(state.curPreset){
+    cur.textContent = "いま読み込んでいるセット：" + state.curPreset;
+  }else if(state.basePreset && unsaved()){
+    cur.className = "note warn";
+    cur.textContent = "要素作業一覧が「" + state.basePreset + "」と違う（未保存）。残すなら下で保存する。";
+    warn.textContent = "未保存の変更がある。「" + state.basePreset + "」に上書きするなら、そのまま「保存」を押す。別のセットにするなら名前を変えてから保存する。";
+    warn.hidden = false;
+    if(!$("presetName").value) $("presetName").value = state.basePreset;
+  }else{
+    cur.textContent = "どのセットも読み込んでいない（手入力の状態）";
+  }
   if(state.presets.length === 0){
     box.innerHTML = '<p class="note">保存されたセットがない。上の欄に名前を入れて「保存」を押すと、ここに並ぶ。</p>';
     return;
@@ -678,9 +727,12 @@ function renderPresets(){
     row.appendChild(cnt);
     var ld = document.createElement("button"); ld.className = "load"; ld.textContent = "読込";
     ld.onclick = function(){
-      if(!confirm("要素作業を「"+p.name+"」に入れ替える。記録済みのデータは消えない。")) return;
+      var msg = "要素作業を「"+p.name+"」に入れ替える。記録済みのデータは消えない。";
+      if(unsaved()) msg = "いまの要素作業一覧は、どのセットにも保存されていない。\n読み込むと、編集した内容は消える。\n\n" + msg;
+      if(!confirm(msg)) return;
       state.tasks = p.tasks.slice();
-      state.curPreset = p.name;
+      state.curPreset = p.name; state.basePreset = p.name;
+      $("presetName").value = "";
       save(); renderSet(); renderRec(); toast("「"+p.name+"」を読み込んだ");
     };
     row.appendChild(ld);
@@ -707,7 +759,7 @@ $("btnSavePreset").onclick = function(){
     state.presets.push({name:nm, tasks:state.tasks.slice()});
   }
   $("presetName").value = "";
-  state.curPreset = nm;
+  state.curPreset = nm; state.basePreset = nm;
   save(); renderPresets(); toast("「"+nm+"」を保存した");
 };
 
@@ -870,18 +922,18 @@ function renderSet(){
       if(!nv){ inp.value = name; return; }
       state.records.forEach(function(r){ if(r.task === name) r.task = nv; });
       if(state.running && state.running.task === name) state.running.task = nv;
-      state.tasks[i] = nv; state.curPreset = ""; save(); renderSet(); renderRec();
+      state.tasks[i] = nv; markEdited(); save(); renderSet(); renderRec();
     };
     var up = document.createElement("button"); up.textContent = "↑";
-    up.onclick = function(){ if(i>0){ var t=state.tasks[i-1]; state.tasks[i-1]=state.tasks[i]; state.tasks[i]=t; save(); renderSet(); renderRec(); } };
+    up.onclick = function(){ if(i>0){ var t=state.tasks[i-1]; state.tasks[i-1]=state.tasks[i]; state.tasks[i]=t; markEdited(); save(); renderSet(); renderRec(); } };
     var dn = document.createElement("button"); dn.textContent = "↓";
-    dn.onclick = function(){ if(i<state.tasks.length-1){ var t=state.tasks[i+1]; state.tasks[i+1]=state.tasks[i]; state.tasks[i]=t; save(); renderSet(); renderRec(); } };
+    dn.onclick = function(){ if(i<state.tasks.length-1){ var t=state.tasks[i+1]; state.tasks[i+1]=state.tasks[i]; state.tasks[i]=t; markEdited(); save(); renderSet(); renderRec(); } };
     var del = document.createElement("button"); del.textContent = "×";
     del.onclick = function(){
       var used = state.records.some(function(r){ return r.task === name; }) ||
                  (state.running && state.running.task === name);
       if(used){ toast("記録があるので削除できない"); return; }
-      state.tasks.splice(i,1); state.curPreset = ""; save(); renderSet(); renderRec();
+      state.tasks.splice(i,1); markEdited(); save(); renderSet(); renderRec();
     };
     row.appendChild(sw); row.appendChild(inp); row.appendChild(up); row.appendChild(dn); row.appendChild(del);
     box.appendChild(row);
@@ -891,13 +943,13 @@ $("btnAddTask").onclick = function(){
   var v = $("newTask").value.trim();
   if(!v) return;
   if(state.tasks.indexOf(v) >= 0){ toast("同じ名前が登録済み"); return; }
-  state.tasks.push(v); $("newTask").value = ""; state.curPreset = "";
+  state.tasks.push(v); $("newTask").value = ""; markEdited();
   save(); renderSet(); renderRec();
 };
 $("btnClear").onclick = function(){
   if(!confirm("すべての記録を消去する。元に戻せない。")) return;
   state.records = []; state.running = null; target = "cur";
-  $("itemNo").value = "";
+  $("itemNo").value = ""; $("itemMemo").value = "";
   save(); renderRec(); toast("記録を消去した");
 };
 $("modeSplit").onchange = function(){ state.mode = "split"; target = "cur"; save(); renderRec(); };
@@ -968,6 +1020,13 @@ $("btnNoClear").onclick = function(){
   var t = noTarget(); if(t){ t.no = ""; save(); }
   $("itemNo").focus();
 };
+$("itemMemo").oninput = function(){ var t = noTarget(); if(t){ t.memo = $("itemMemo").value; save(); } };
+$("itemMemo").onkeydown = function(e){ if(e.key === "Enter"){ e.preventDefault(); $("itemMemo").blur(); } };
+$("btnMemoClear").onclick = function(){
+  $("itemMemo").value = "";
+  var t = noTarget(); if(t){ t.memo = ""; save(); }
+  $("itemMemo").focus();
+};
 window.addEventListener("beforeunload", function(e){
   if(state.running){ e.preventDefault(); e.returnValue = ""; }
 });
@@ -988,7 +1047,7 @@ if(!canStore){ $("wakeNote").textContent += " ／ この環境ではデータを
 $("vibNote").textContent = navigator.vibrate
   ? "マナーモードが「ミュート（サイレント）」だと振動しない。「バイブレーション」にするか解除する。音はマナーモードでも鳴る。"
   : "このブラウザは振動に対応していない。音か画面の点滅で代用する。";
-var APP_VER = "2026-09-26";
+var APP_VER = "2026-10-07";
 $("verLine").textContent = "版 " + APP_VER + (location.protocol.indexOf("http") === 0 ? "" : "（端末内のファイルで実行中）");
 renderRec();
 if(state.running) requestWake();
